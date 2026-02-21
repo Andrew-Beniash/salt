@@ -1,8 +1,22 @@
 version: "3.9"
 
-# ─── Common environment ───────────────────────────────────────────────────────
+# ─── Reusable fragments ────────────────────────────────────────────────────────
 x-app-env: &app-env
-  env_file: ../.env
+  env_file:
+    - path: ../.env
+      required: false          # stack starts without .env; use .env for real creds
+
+x-backend-build: &backend-build
+  build:
+    context: ../backend
+    dockerfile: Dockerfile
+
+x-worker-deps: &worker-deps
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
 
 # ─── Services ─────────────────────────────────────────────────────────────────
 services:
@@ -39,95 +53,63 @@ services:
 
   # ── FastAPI ───────────────────────────────────────────────────────────────────
   api:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
+    <<: [*backend-build, *app-env, *worker-deps]
     restart: unless-stopped
-    <<: *app-env
     ports:
       - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     volumes:
-      - storage:/storage
+      - ../storage:/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   # ── Celery — ingestion queue (gevent, 20 concurrency) ─────────────────────────
   worker-ingestion:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
+    <<: [*backend-build, *app-env, *worker-deps]
     restart: unless-stopped
-    <<: *app-env
     command: celery -A app.worker worker -Q ingestion --pool=gevent -c 20 --loglevel=info
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     volumes:
-      - storage:/storage
+      - ../storage:/storage
 
-  # ── Celery — extraction queue (gevent, 100 concurrency) ───────────────────────
+  # ── Celery — extraction queue (gevent, 100 concurrency, 2 replicas) ───────────
   worker-extraction:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
+    <<: [*backend-build, *app-env, *worker-deps]
     restart: unless-stopped
-    <<: *app-env
     command: celery -A app.worker worker -Q extraction --pool=gevent -c 100 --loglevel=info
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     volumes:
-      - storage:/storage
+      - ../storage:/storage
     deploy:
       replicas: 2
 
   # ── Celery — routing queue (prefork, 8 concurrency) ───────────────────────────
   worker-routing:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
+    <<: [*backend-build, *app-env, *worker-deps]
     restart: unless-stopped
-    <<: *app-env
     command: celery -A app.worker worker -Q routing --pool=prefork -c 8 --loglevel=info
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
 
   # ── Celery — notification queue (gevent, 4 concurrency) ───────────────────────
   worker-notification:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
+    <<: [*backend-build, *app-env, *worker-deps]
     restart: unless-stopped
-    <<: *app-env
     command: celery -A app.worker worker -Q notification --pool=gevent -c 4 --loglevel=info
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
 
   # ── Flower (Celery dashboard) ─────────────────────────────────────────────────
   flower:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
+    <<: [*backend-build, *app-env]
     restart: unless-stopped
-    <<: *app-env
-    command: celery -A app.worker flower --port=5555 --basic-auth=${FLOWER_BASIC_AUTH}
+    # $$VAR → $VAR after compose substitution; shell then expands with default
+    command: >
+      sh -c 'celery -A app.worker flower
+      --port=5555
+      --basic-auth=$${FLOWER_BASIC_AUTH:-admin:change-me}'
     ports:
       - "5555:5555"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
 
   # ── React SPA ─────────────────────────────────────────────────────────────────
   frontend:
@@ -138,9 +120,9 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 # ─── Volumes ──────────────────────────────────────────────────────────────────
 volumes:
   pgdata:
-  storage:
