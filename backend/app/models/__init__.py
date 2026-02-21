@@ -1,19 +1,34 @@
 """SQLAlchemy ORM models.
 
-All models import ``Base`` from here and register themselves on it:
+Import ``Base`` and any model class from here::
 
-    from app.models import Base
-
-    class Engagement(Base):
-        __tablename__ = "engagements"
-        ...
+    from app.models import Base, User, Engagement
 
 Alembic's env.py also imports ``Base.metadata`` so that autogenerate
 can detect schema changes.
+
+All submodule imports below register every model class on ``Base.metadata``
+so that Alembic sees every table when ``target_metadata`` is set.
 """
 
-from sqlalchemy.orm import DeclarativeBase
+from app.models.base import Base
 
+# Register all models with Base.metadata (import order respects FK deps)
+from app.models.user import User
+from app.models.engagement import Engagement, EngagementMember, OneDriveFolder
+from app.models.document import Document
+from app.models.extraction import Extraction
+from app.models.review_log import ReviewLog
+from app.models.routing_log import RoutingLog
 
-class Base(DeclarativeBase):
-    """Shared declarative base for every ORM model in this project."""
+__all__ = [
+    "Base",
+    "User",
+    "Engagement",
+    "EngagementMember",
+    "OneDriveFolder",
+    "Document",
+    "Extraction",
+    "ReviewLog",
+    "RoutingLog",
+]
