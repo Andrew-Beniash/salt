@@ -1,0 +1,146 @@
+version: "3.9"
+
+# ─── Common environment ───────────────────────────────────────────────────────
+x-app-env: &app-env
+  env_file: ../.env
+
+# ─── Services ─────────────────────────────────────────────────────────────────
+services:
+
+  # ── PostgreSQL 16 ────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: salt
+      POSTGRES_PASSWORD: salt
+      POSTGRES_DB: salt
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U salt"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Redis 7 ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── FastAPI ───────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    <<: *app-env
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - storage:/storage
+
+  # ── Celery — ingestion queue (gevent, 20 concurrency) ─────────────────────────
+  worker-ingestion:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    <<: *app-env
+    command: celery -A app.worker worker -Q ingestion --pool=gevent -c 20 --loglevel=info
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - storage:/storage
+
+  # ── Celery — extraction queue (gevent, 100 concurrency) ───────────────────────
+  worker-extraction:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    <<: *app-env
+    command: celery -A app.worker worker -Q extraction --pool=gevent -c 100 --loglevel=info
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - storage:/storage
+    deploy:
+      replicas: 2
+
+  # ── Celery — routing queue (prefork, 8 concurrency) ───────────────────────────
+  worker-routing:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    <<: *app-env
+    command: celery -A app.worker worker -Q routing --pool=prefork -c 8 --loglevel=info
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Celery — notification queue (gevent, 4 concurrency) ───────────────────────
+  worker-notification:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    <<: *app-env
+    command: celery -A app.worker worker -Q notification --pool=gevent -c 4 --loglevel=info
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Flower (Celery dashboard) ─────────────────────────────────────────────────
+  flower:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    <<: *app-env
+    command: celery -A app.worker flower --port=5555 --basic-auth=${FLOWER_BASIC_AUTH}
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+
+  # ── React SPA ─────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+# ─── Volumes ──────────────────────────────────────────────────────────────────
+volumes:
+  pgdata:
+  storage:
