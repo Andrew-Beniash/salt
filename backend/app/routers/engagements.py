@@ -11,6 +11,7 @@ from app.models.user import User
 from app.repositories import engagements as repo
 from app.repositories import users as users_repo
 from app.schemas.engagement import (
+    ActivationOut,
     EngagementCreate, EngagementOut, EngagementUpdate,
     EngagementMemberCreate, EngagementMemberOut,
     OneDriveFolderCreate, OneDriveFolderOut,
@@ -213,4 +214,73 @@ async def save_output_schema(
     fields_data = [f.model_dump() for f in schema_in.fields]
     updated = await repo.save_schema(db, engagement, fields_data)
     return SchemaOut(fields=[SchemaField(**f) for f in updated.output_schema])
+
+
+# ── Activation (FR-013) ───────────────────────────────────────────────────────
+
+@router.post(
+    "/{id}/activate",
+    response_model=ActivationOut,
+    summary="Activate an engagement",
+)
+async def activate_engagement(
+    engagement: Engagement = Depends(get_engagement_creator_or_admin),
+    db: AsyncSession = Depends(get_db),
+) -> ActivationOut:
+    """Transition an engagement from *draft* to *processing* and dispatch ingestion.
+
+    Preconditions (all must hold; first failure wins):
+
+    - Status is ``draft`` — any other status returns **HTTP 409**.
+    - At least one OneDrive folder is registered — returns **HTTP 400** otherwise.
+    - Output schema has at least one field — returns **HTTP 400** otherwise.
+
+    On success the engagement status is immediately set to ``processing`` and
+    the ``ingest_engagement`` Celery task is dispatched to the ``ingestion``
+    queue.  The response is returned without waiting for the worker to start.
+    """
+    # ── Guard: must be draft ──────────────────────────────────────────────
+    if engagement.status != "draft":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Engagement is already in '{engagement.status}' status. "
+                "Only draft engagements can be activated."
+            ),
+        )
+
+    # ── Guard: at least one folder registered ─────────────────────────────
+    folders = await repo.get_folders(db, engagement.id)
+    if not folders:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Cannot activate engagement: no OneDrive folders have been "
+                "registered. Add at least one folder before activating."
+            ),
+        )
+
+    # ── Guard: schema has at least one field ──────────────────────────────
+    schema = engagement.output_schema
+    if not schema or not isinstance(schema, list) or len(schema) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Cannot activate engagement: no output schema fields have been "
+                "defined. Save a schema with at least one field before activating."
+            ),
+        )
+
+    # ── Persist status change ─────────────────────────────────────────────
+    await repo.activate_engagement(db, engagement)
+
+    # ── Dispatch ingestion task (fire-and-forget) ─────────────────────────
+    from app.tasks.ingestion import ingest_engagement  # deferred to avoid startup cycle
+
+    ingest_engagement.apply_async(
+        args=[str(engagement.id)],
+        queue="ingestion",
+    )
+
+    return ActivationOut(status="processing")
 

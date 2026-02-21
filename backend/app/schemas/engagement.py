@@ -31,8 +31,15 @@ class EngagementOut(BaseModel):
     created_by: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
+    activated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ActivationOut(BaseModel):
+    """Response body for POST /engagements/{id}/activate."""
+
+    status: str
 
 class EngagementMemberCreate(BaseModel):
     email: str = Field(..., max_length=255)

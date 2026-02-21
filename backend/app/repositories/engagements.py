@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -145,6 +146,21 @@ async def save_schema(
 ) -> Engagement:
     """Persist the output schema (list of field dicts) on the engagement row."""
     engagement.output_schema = fields
+    db.add(engagement)
+    await db.commit()
+    await db.refresh(engagement)
+    return engagement
+
+
+async def activate_engagement(
+    db: AsyncSession,
+    engagement: Engagement,
+) -> Engagement:
+    """Transition an engagement from draft → processing and stamp activated_at."""
+    now = datetime.now(timezone.utc)
+    engagement.status = "processing"
+    engagement.activated_at = now
+    engagement.updated_at = now
     db.add(engagement)
     await db.commit()
     await db.refresh(engagement)
