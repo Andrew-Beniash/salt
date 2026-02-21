@@ -20,10 +20,12 @@ from app.models.document import Document
 from app.models.extraction import Extraction
 from app.models.review_log import ReviewLog
 from app.models.routing_log import RoutingLog
+from app.models.microsoft_token import MicrosoftToken
 
 __all__ = [
     "Base",
     "User",
+    "MicrosoftToken",
     "Engagement",
     "EngagementMember",
     "OneDriveFolder",
@@ -31,4 +33,5 @@ __all__ = [
     "Extraction",
     "ReviewLog",
     "RoutingLog",
+    "MicrosoftToken",
 ]

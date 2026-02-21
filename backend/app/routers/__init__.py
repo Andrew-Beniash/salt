@@ -10,6 +10,8 @@ from app.routers.health import router as health_router
 from app.dependencies.auth import get_current_user
 from app.routers.users import router as users_router
 from app.routers.tasks import router as tasks_router
+from app.routers.engagements import router as engagements_router
+from app.routers.auth import router as auth_router
 
 def register_routers(app: FastAPI) -> None:
     # Ops / infra — no /api prefix so the health probe works at the root
@@ -20,7 +22,9 @@ def register_routers(app: FastAPI) -> None:
     
     # Register feature routers here
     api_router.include_router(users_router)
+    api_router.include_router(engagements_router)
 
     app.include_router(api_router)
     app.include_router(tasks_router, prefix="/api")
+    app.include_router(auth_router, prefix="/api")
 
