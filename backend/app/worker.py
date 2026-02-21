@@ -1,11 +1,14 @@
-import os
-
 from celery import Celery
 
-_broker = os.getenv("REDIS_URL", "redis://redis:6379/0")
-_backend = os.getenv("REDIS_URL", "redis://redis:6379/0")
+from app.config import get_settings
 
-app = Celery("salt", broker=_broker, backend=_backend)
+_settings = get_settings()
+
+app = Celery(
+    "salt",
+    broker=_settings.redis_url,
+    backend=_settings.redis_url,
+)
 
 app.conf.update(
     task_serializer="json",
