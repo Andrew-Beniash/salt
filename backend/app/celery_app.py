@@ -8,6 +8,12 @@ app = Celery(
     "salt",
     broker=_settings.redis_url,
     backend=_settings.redis_url,
+    include=[
+        "app.tasks.ingestion",
+        "app.tasks.extraction",
+        "app.tasks.routing",
+        "app.tasks.notification",
+    ]
 )
 
 app.conf.update(
@@ -20,9 +26,9 @@ app.conf.update(
     task_acks_late=True,
     task_reject_on_worker_lost=True,
     task_routes={
-        "tasks.ingestion.*": {"queue": "ingestion"},
-        "tasks.extraction.*": {"queue": "extraction"},
-        "tasks.routing.*": {"queue": "routing"},
-        "tasks.notification.*": {"queue": "notification"},
+        "app.tasks.ingestion.*": {"queue": "ingestion"},
+        "app.tasks.extraction.*": {"queue": "extraction"},
+        "app.tasks.routing.*": {"queue": "routing"},
+        "app.tasks.notification.*": {"queue": "notification"},
     },
 )
