@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { Engagement, EngagementMember, OneDriveFolder, SchemaField } from '@/types/engagement';
+import type { Engagement, EngagementMember, OneDriveFolder, SchemaField, EngagementProgress, RejectedDocument } from '@/types/engagement';
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
@@ -116,3 +116,48 @@ export function useSaveSchema() {
     },
   });
 }
+
+export function useEngagementProgress(engagementId: string, isProcessing: boolean) {
+  return useQuery<EngagementProgress>({
+    queryKey: ['engagements', engagementId, 'progress'],
+    queryFn: async () => {
+      const { data } = await api.get<EngagementProgress>(
+        `/api/engagements/${engagementId}/progress`,
+      );
+      return data;
+    },
+    enabled: !!engagementId && isProcessing,
+    // Poll every 5s while processing is active
+    refetchInterval: isProcessing ? 5000 : false,
+  });
+}
+
+export function useRejectedDocuments(engagementId: string, enabled: boolean) {
+  return useQuery<RejectedDocument[]>({
+    queryKey: ['engagements', engagementId, 'rejected'],
+    queryFn: async () => {
+      const { data } = await api.get<RejectedDocument[]>(
+        `/api/engagements/${engagementId}/rejected-documents`,
+      );
+      return data;
+    },
+    enabled: !!engagementId && enabled,
+  });
+}
+
+export function useActivateEngagement() {
+  const queryClient = useQueryClient();
+  return useMutation<{ status: string }, Error, string>({
+    mutationFn: async (engagementId) => {
+      const { data } = await api.post<{ status: string }>(
+        `/api/engagements/${engagementId}/activate`,
+      );
+      return data;
+    },
+    onSuccess: (_, engagementId) => {
+      queryClient.invalidateQueries({ queryKey: ['engagements', engagementId] });
+      queryClient.invalidateQueries({ queryKey: ['engagements'] });
+    },
+  });
+}
+

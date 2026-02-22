@@ -4,9 +4,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-@app.task
-def sample_extraction_task(doc_id: str):
-    logger.info(f"Starting extraction for document {doc_id}")
+@app.task(bind=True, name="app.tasks.extraction.extract_document")
+def extract_document(self, document_id: str):
+    logger.info(f"Starting extraction for document {document_id}")
     time.sleep(2)
-    logger.info(f"Finished extraction for document {doc_id}")
-    return {"status": "success", "queue": "extraction", "doc_id": doc_id}
+    logger.info(f"Finished extraction for document {document_id}")
+    return {"status": "success", "queue": "extraction", "document_id": document_id}

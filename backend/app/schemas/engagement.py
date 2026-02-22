@@ -118,3 +118,21 @@ class SchemaOut(BaseModel):
     """Response body for GET and POST /engagements/{id}/schema."""
 
     fields: list[SchemaField]
+
+class EngagementProgress(BaseModel):
+    discovered: int = 0
+    validated: int = 0
+    rejected: int = 0
+    downloaded: int = 0
+    queued: int = 0
+    extracting: int = 0
+    auto_approved: int = 0
+    pending_review: int = 0
+    confirmed: int = 0
+    corrected: int = 0
+    extraction_failed: int = 0
+    download_failed: int = 0
+    
+    total: int = 0
+    percent_complete: float = 0.0
+

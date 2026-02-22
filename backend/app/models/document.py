@@ -43,8 +43,10 @@ class Document(Base):
         String(50), nullable=False, server_default="discovered"
     )
     rejection_reason: Mapped[str | None] = mapped_column(Text)
+    error_detail: Mapped[str | None] = mapped_column(Text)
     file_size_bytes: Mapped[int | None] = mapped_column(BigInteger)
     discovered_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )
+    downloaded_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     processed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))

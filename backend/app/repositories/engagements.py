@@ -138,6 +138,60 @@ async def remove_folder(db: AsyncSession, engagement_id: uuid.UUID, folder_id: u
         await db.delete(folder)
         await db.commit()
 
+async def get_engagement_progress(db: AsyncSession, engagement_id: uuid.UUID) -> dict:
+    from app.models.document import Document
+    from sqlalchemy import func
+    
+    query = select(Document.status, func.count(Document.id)).where(
+        Document.engagement_id == engagement_id
+    ).group_by(Document.status)
+    
+    result = await db.execute(query)
+    counts = dict(result.all())
+    
+    # Base fields that match the exact status strings
+    progress = {
+        "discovered": counts.get("discovered", 0),
+        "validated": counts.get("validated", 0),
+        "rejected": counts.get("rejected", 0),
+        "downloaded": counts.get("downloaded", 0),
+        "queued": counts.get("queued", 0),
+        "extracting": counts.get("extracting", 0),
+        "auto_approved": counts.get("auto_approved", 0),
+        "pending_review": counts.get("pending_review", 0),
+        "confirmed": counts.get("confirmed", 0),
+        "corrected": counts.get("corrected", 0),
+        "extraction_failed": counts.get("extraction_failed", 0),
+        "download_failed": counts.get("download_failed", 0),
+    }
+    
+    total = sum(progress.values())
+    
+    terminal_statuses = {
+        "auto_approved", "confirmed", "corrected", 
+        "rejected", "extraction_failed", "download_failed"
+    }
+    
+    terminal_count = sum(progress[s] for s in terminal_statuses)
+    
+    progress["total"] = total
+    progress["percent_complete"] = (terminal_count / total * 100.0) if total > 0 else 0.0
+    
+    return progress
+
+async def get_rejected_documents(db: AsyncSession, engagement_id: uuid.UUID) -> list:
+    from app.models.document import Document
+    result = await db.execute(
+        select(Document)
+        .where(
+            Document.engagement_id == engagement_id,
+            Document.status == "rejected"
+        )
+        .order_by(Document.discovered_at.desc())
+    )
+    return list(result.scalars().all())
+
+
 
 async def save_schema(
     db: AsyncSession,

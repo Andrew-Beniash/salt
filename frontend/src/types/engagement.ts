@@ -37,3 +37,29 @@ export interface OneDriveFolder {
   microsoft_user: string | null;
   registered_at: string;
 }
+
+export interface EngagementProgress {
+  discovered: number;
+  validated: number;
+  rejected: number;
+  downloaded: number;
+  queued: number;
+  extracting: number;
+  auto_approved: number;
+  pending_review: number;
+  confirmed: number;
+  corrected: number;
+  extraction_failed: number;
+  download_failed: number;
+  total: number;
+  percent_complete: number;
+}
+
+export interface RejectedDocument {
+  id: string;
+  filename: string;
+  rejection_reason: string | null;
+  error_detail: string | null;
+  discovered_at: string;
+}
+

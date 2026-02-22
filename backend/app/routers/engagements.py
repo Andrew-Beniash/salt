@@ -15,7 +15,7 @@ from app.schemas.engagement import (
     EngagementCreate, EngagementOut, EngagementUpdate,
     EngagementMemberCreate, EngagementMemberOut,
     OneDriveFolderCreate, OneDriveFolderOut,
-    SchemaField, SchemaIn, SchemaOut,
+    SchemaField, SchemaIn, SchemaOut, EngagementProgress,
 )
 
 router = APIRouter(prefix="/engagements", tags=["engagements"])
@@ -283,4 +283,28 @@ async def activate_engagement(
     )
 
     return ActivationOut(status="processing")
+
+@router.get("/{id}/progress", response_model=EngagementProgress, summary="Get processing progress")
+async def get_engagement_progress_endpoint(
+    engagement: Engagement = Depends(get_engagement_or_403),
+    db: AsyncSession = Depends(get_db),
+) -> EngagementProgress:
+    """Return real-time counts of documents in each processing state.
+    
+    percent_complete is the percentage of total documents that have reached a terminal state.
+    """
+    progress = await repo.get_engagement_progress(db, engagement.id)
+    return EngagementProgress(**progress)
+
+@router.get("/{id}/rejected-documents", response_model=List[dict], summary="Get rejected documents")
+async def get_rejected_documents_endpoint(
+    engagement: Engagement = Depends(get_engagement_or_403),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return documents that were rejected during format validation."""
+    from app.schemas.document import DocumentRejectedOut
+    docs = await repo.get_rejected_documents(db, engagement.id)
+    return [DocumentRejectedOut.model_validate(doc).model_dump() for doc in docs]
+
+
 
